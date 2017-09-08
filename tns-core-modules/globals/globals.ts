@@ -26,6 +26,8 @@ import * as dialogsModule from "../ui/dialogs";
 type ModuleLoader = (name?: string) => any;
 const modules: Map<string, ModuleLoader> = new Map<string, ModuleLoader>();
 
+(<any>global).moduleResolvers = [global.require];
+
 global.registerModule = function(name: string, loader: ModuleLoader): void {
     modules.set(name, loader);
 }
@@ -38,10 +40,13 @@ global.loadModule = function(name: string): any {
     const loader = modules.get(name);
     if (loader) {
         return loader();
-    } else {
-        let result = global.require(name);
-        modules.set(name, () => result);
-        return result;
+    }
+    for (let resolver of (<any>global).moduleResolvers) {
+        const result = resolver(name);
+        if (result) {
+            modules.set(name, () => result);
+            return result;
+        }
     }
 }
 
@@ -71,10 +76,6 @@ function registerOnGlobalContext(name: string, module: string): void {
         get: function () {
             // We do not need to cache require() call since it is already cached in the runtime.
             let m = global.loadModule(module);
-            if (!__tnsGlobalMergedModules.has(module)) {
-                __tnsGlobalMergedModules.set(module, true);
-                global.moduleMerge(m, global);
-            }
 
             // Redefine the property to make sure the above code is executed only once.
             let resolvedValue = m[name];
@@ -106,6 +107,8 @@ export function install() {
                 alert: dialogs.alert,
                 confirm: dialogs.confirm,
                 prompt: dialogs.prompt,
+                login: dialogs.login,
+                action: dialogs.action,
 
                 XMLHttpRequest: xhr.XMLHttpRequest,
                 FormData: xhr.FormData,
@@ -124,12 +127,20 @@ export function install() {
         registerOnGlobalContext("clearTimeout", "timer");
         registerOnGlobalContext("setInterval", "timer");
         registerOnGlobalContext("clearInterval", "timer");
+
         registerOnGlobalContext("alert", "ui/dialogs");
         registerOnGlobalContext("confirm", "ui/dialogs");
         registerOnGlobalContext("prompt", "ui/dialogs");
+        registerOnGlobalContext("login", "ui/dialogs");
+        registerOnGlobalContext("action", "ui/dialogs");
+
         registerOnGlobalContext("XMLHttpRequest", "xhr");
         registerOnGlobalContext("FormData", "xhr");
+
         registerOnGlobalContext("fetch", "fetch");
+        registerOnGlobalContext("Headers", "fetch");
+        registerOnGlobalContext("Request", "fetch");
+        registerOnGlobalContext("Response", "fetch");
 
         // check whether the 'android' namespace is exposed
         // if positive - the current device is an Android 
